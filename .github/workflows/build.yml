@@ -1,0 +1,53 @@
+
+name: Build Telegram Classic
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: brew install xmake cmake ninja
+
+      - name: Configure Telegram API
+        env:
+          TG_API_ID: ${{ secrets.TG_API_ID }}
+          TG_API_HASH: ${{ secrets.TG_API_HASH }}
+        run: |
+          cp src/Resources/Config/tg_config.h.example \
+             src/Resources/Config/tg_config.h
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          p = Path("src/Resources/Config/tg_config.h")
+          s = p.read_text()
+          s = s.replace("12345", os.environ["TG_API_ID"])
+          s = s.replace(
+              "0123456789abcdef0123456789abcdef",
+              os.environ["TG_API_HASH"]
+          )
+          p.write_text(s)
+          PY
+
+      - name: Configure ARMv7
+        run: xmake f -p iphoneos -a armv7 -y
+
+      - name: Build
+        run: xmake -y
+
+      - name: Build Debian packages
+        run: xmake deb -y
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: Telegram-Classic-packages
+          path: "**/*.deb"
+          if-no-files-found: error
